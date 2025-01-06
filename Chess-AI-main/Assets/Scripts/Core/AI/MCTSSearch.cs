@@ -174,7 +174,18 @@
                 moves=moveGenerator.GenerateMoves(board, false);
             }
             //Once there are no moves or we reached the end, we evaluate the position
-            //Evaluation.EvaluateSimBoard()
+            if (moves.Count == 0)
+            {
+                //Termination on no available moves. Current on move loses.
+                if (board.WhiteToMove) return ResultAbridged.WhiteLoss;
+                else return ResultAbridged.WhiteWin;
+            }
+            else
+            {
+                //Assumes we stopped for a good reason, we call it a draw.
+                return ResultAbridged.Draw;
+            }
+
         }
         static void BackpropagateFromNode(MCTSNode node, ResultAbridged result)
         {
