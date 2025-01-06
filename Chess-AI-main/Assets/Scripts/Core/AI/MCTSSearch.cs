@@ -156,7 +156,63 @@
                 node.children.Add(children[i], newNode);
             }
         }
-        
+
+        enum ResultAbridged { WhiteWin, WhiteLoss, Draw}
+        static ResultAbridged SimulateFromNode(MCTSNode node, int maxSimulatedMoves = 50)
+        {
+            //Simulated moves are capped at a reasonable future value (Stockfish search depths usually cap out near the 30s even on modern PCs and that is already 99%+ accurate)
+            Board board = node.boardState.Clone();
+            int movesTaken = 0;
+            MoveGenerator moveGenerator = new MoveGenerator();
+            var moves = moveGenerator.GenerateMoves(board, true);
+            //While there are moves available, go and randomly select a move and move on the board.
+            while (moves.Count > 0 && movesTaken < maxSimulatedMoves)
+            {
+                movesTaken++;
+                int nextMoveIndex=UnityEngine.Random.Range(0, moves.Count);
+                board.MakeMove(moves[nextMoveIndex], true);
+                moves=moveGenerator.GenerateMoves(board, false);
+            }
+            //Once there are no moves or we reached the end, we evaluate the position
+            //Evaluation.EvaluateSimBoard()
+        }
+        static void BackpropagateFromNode(MCTSNode node, ResultAbridged result)
+        {
+            //Recursive calling of backpropagation on the tree... Runs into the recursion limit potentially, but that shouldn't be an issue in practice due to the branching factor of playouts.
+            switch (result) 
+            {
+                case ResultAbridged.WhiteWin:
+                    if (node.boardState.WhiteToMove)
+                    {
+                        node.wonPlayouts++;
+                    }
+                    else
+                    {
+                        node.lostPlayouts++;
+                    }
+                    break;
+                case ResultAbridged.WhiteLoss:
+                    if (node.boardState.WhiteToMove)
+                    {
+                        node.lostPlayouts++;
+                    }
+                    else
+                    {
+                        node.wonPlayouts++;
+                    }
+                    break;
+                case ResultAbridged.Draw:
+                    node.drawPlayouts++;
+                    break;
+                default:
+                    throw new Exception("Unexpected result");
+            }
+            if (node.prevNode != null)
+            {
+                BackpropagateFromNode(node.prevNode, result);
+            }
+        }
+
         //Following section is copied from the game manager since there was no other way to access the evaluation.
         public enum Result { Playing, WhiteIsMated, BlackIsMated, Stalemate, Repetition, FiftyMoveRule, InsufficientMaterial, TooManyMoves }
         static Result GetResultFromBoard(Board board)
@@ -204,6 +260,5 @@
 
             return Result.Playing;
         }
-    
     }
 }
