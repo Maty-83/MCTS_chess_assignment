@@ -71,7 +71,30 @@
             // TODO
             // Don't forget to end the search once the abortSearch parameter gets set to true.
 
-            throw new NotImplementedException();
+            //throw new NotImplementedException();
+            MCTSNode rootNode = new MCTSNode(!board.WhiteToMove, null, 0, board, Move.InvalidMove);
+            do
+            {
+                //Search loop here. Do-while as a simple way to make sure we always create a valid outcome so I'm not solving any stupid things.
+                MCTSNode expandingNode=DoSelection(rootNode);//HACK: We assume root isn't terminal, unsure if it's right.
+                ExpandNode(expandingNode);
+                var result=SimulateFromNode(expandingNode);//WARNING: Is this how it's supposed to go? Not sure, we're gonna skip the final layer.
+                BackpropagateFromNode(expandingNode, result);
+
+            } while (!abortSearch);
+            //TODO: Add a search through all children of Root for one with most won playouts
+            var maxWonPlayoutsRatio = -0.01;
+            foreach (var kvp in rootNode.children) {
+                double winRatio = kvp.Value.wonPlayouts / (kvp.Value.wonPlayouts + kvp.Value.drawPlayouts + kvp.Value.lostPlayouts);
+                if (winRatio > maxWonPlayoutsRatio)
+                {
+                    maxWonPlayoutsRatio=winRatio;
+                    bestMove = kvp.Key;
+                }
+            
+            }
+
+            throw new NotImplementedException();//Because it hasn't been tested and the feedback isn't incorporated yet.
         }
 
         void LogDebugInfo()
@@ -127,7 +150,7 @@
             //I think creating a node and doing an expansion is the next homework, but I'm not sure.
 
         }
-        static void expandNode(MCTSNode node)
+        static void ExpandNode(MCTSNode node)
         {
             //I will probably write a governing function later, so this doesn't need to be connected yet.
 
@@ -220,7 +243,7 @@
             }
             if (node.prevNode != null)
             {
-                BackpropagateFromNode(node.prevNode, result);
+                BackpropagateFromNode(node.prevNode, result);//TODO: Probably better to use the actual chess material difference instead of just results enum
             }
         }
 
