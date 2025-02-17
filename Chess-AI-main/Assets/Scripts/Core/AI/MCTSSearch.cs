@@ -72,26 +72,28 @@
             // Don't forget to end the search once the abortSearch parameter gets set to true.
 
             //throw new NotImplementedException();
-            MCTSNode rootNode = new MCTSNode(!board.WhiteToMove, null, 0, board, Move.InvalidMove);
+            MCTSNode rootNode = new MCTSNode(!board.WhiteToMove, null, board, Move.InvalidMove);
             do
             {
                 //Search loop here. Do-while as a simple way to make sure we always create a valid outcome so I'm not solving any stupid things.
-                MCTSNode expandingNode=DoSelection(rootNode);//HACK: We assume root isn't terminal, unsure if it's right.
+                MCTSNode expandingNode = DoSelection(rootNode); //HACK: We assume root isn't terminal, unsure if it's right.
                 ExpandNode(expandingNode);
-                var result=SimulateFromNode(expandingNode);//WARNING: Is this how it's supposed to go? Not sure, we're gonna skip the final layer.
+                var result = SimulateFromNode(expandingNode);   //WARNING: Is this how it's supposed to go? Not sure, we're gonna skip the final layer.
+                                                                //Note: The simulation on a terminal node happens on the first expansion.
                 BackpropagateFromNode(expandingNode, result);
 
             } while (!abortSearch);
             //TODO: Add a search through all children of Root for one with most won playouts
             var maxWonPlayoutsRatio = -0.01;
-            foreach (var kvp in rootNode.children) {
+            foreach (var kvp in rootNode.children)
+            {
                 double winRatio = kvp.Value.wonPlayouts / (kvp.Value.wonPlayouts + kvp.Value.drawPlayouts + kvp.Value.lostPlayouts);
                 if (winRatio > maxWonPlayoutsRatio)
                 {
-                    maxWonPlayoutsRatio=winRatio;
+                    maxWonPlayoutsRatio = winRatio;
                     bestMove = kvp.Key;
                 }
-            
+
             }
 
             throw new NotImplementedException();//Because it hasn't been tested and the feedback isn't incorporated yet.
@@ -127,27 +129,25 @@
                 foreach (var kvp in node.children)
                 {
                     MCTSNode child = kvp.Value;
-                    int totalPlayoutsParent = node.wonPlayouts + node.drawPlayouts + node.lostPlayouts;
-                    int totalPlayoutsChild = child.wonPlayouts + child.drawPlayouts + child.lostPlayouts;
-                    double currentUCB =
-                        (child.wonPlayouts + child.drawPlayouts * drawWinMult) / (totalPlayoutsChild) +
-                        explorationParam * Mathf.Sqrt(Mathf.Log(totalPlayoutsParent) / totalPlayoutsChild);//TODO: Unsure if this is the right UCB calculation
-
-                    if (currentUCB > maxUCB)
+                    if (!child.isTerminal)//We don't expand terminals further since their outcome is known.
                     {
-                        maxUCB = currentUCB;
-                        nextNode = child;
+                        int totalPlayoutsParent = node.wonPlayouts + node.drawPlayouts + node.lostPlayouts;
+                        int totalPlayoutsChild = child.wonPlayouts + child.drawPlayouts + child.lostPlayouts;
+                        double currentUCB =
+                            (child.wonPlayouts + child.drawPlayouts * drawWinMult) / (totalPlayoutsChild) +
+                            explorationParam * Mathf.Sqrt(Mathf.Log(totalPlayoutsParent) / totalPlayoutsChild);//TODO: Unsure if this is the right UCB calculation
+
+                        if (currentUCB > maxUCB)
+                        {
+                            maxUCB = currentUCB;
+                            nextNode = child;
+                        }
                     }
                 }
                 node = nextNode;
             }
-            if (node.isTerminal)
-            {
-                return node.prevNode;//TODO: We need to modify this for the terminal node presence!!!
-            }
-            else return node;
-
-            //I think creating a node and doing an expansion is the next homework, but I'm not sure.
+            //Since we know we haven't gone into any known terminal node, we've returned either an non-terminal node or an unknown terminal node the expansion step will immediately catch.
+            return node;
 
         }
         static void ExpandNode(MCTSNode node)
@@ -163,24 +163,24 @@
             }
             else
             {
-                children=moveGenerator.GenerateMoves(node.boardState, false, true);
+                children = moveGenerator.GenerateMoves(node.boardState, false, true);//TODO: Check with Petr that I'm actually supposed to ignore illegal moves in children even for expansion, not just sim.
+            }
+            if (children.Count == 0)
+            {
+                node.isTerminal = true;//Only expanded nodes can be considered terminal. This means we cycle into it one more time, but should still allow us to correctly execute with little efficiency loss
+                return;
             }
             for (int i = children.Count - 1; i >= 0; i--)
             {
                 Board boardCopy = node.boardState.Clone();
                 boardCopy.MakeMove(children[i], true);//Now we have the move.
 
-                MCTSNode newNode = new MCTSNode(boardCopy.ColourToMove == Piece.Black, node, node.depth + 1, boardCopy, children[i]);
-
-                if (GetResultFromBoard(boardCopy) != Result.Playing)
-                {
-                    newNode.isTerminal = true;
-                }
+                MCTSNode newNode = new MCTSNode(boardCopy.ColourToMove == Piece.Black, node, boardCopy, children[i]);
                 node.children.Add(children[i], newNode);
             }
         }
 
-        enum ResultAbridged { WhiteWin, WhiteLoss, Draw}
+        enum ResultAbridged { WhiteWin, WhiteLoss, Draw }
         static ResultAbridged SimulateFromNode(MCTSNode node, int maxSimulatedMoves = 50)
         {
             //Simulated moves are capped at a reasonable future value (Stockfish search depths usually cap out near the 30s even on modern PCs and that is already 99%+ accurate)
@@ -192,9 +192,10 @@
             while (moves.Count > 0 && movesTaken < maxSimulatedMoves)
             {
                 movesTaken++;
-                int nextMoveIndex=UnityEngine.Random.Range(0, moves.Count);
+                int nextMoveIndex = UnityEngine.Random.Range(0, moves.Count);
                 board.MakeMove(moves[nextMoveIndex], true);
-                moves=moveGenerator.GenerateMoves(board, false);
+                moves = moveGenerator.GenerateMoves(board, false);
+                if (board.fiftyMoveCounter>50) return ResultAbridged.Draw;//kill if we'd draw anyway.
             }
             //Once there are no moves or we reached the end, we evaluate the position
             if (moves.Count == 0)
@@ -213,7 +214,7 @@
         static void BackpropagateFromNode(MCTSNode node, ResultAbridged result)
         {
             //Recursive calling of backpropagation on the tree... Runs into the recursion limit potentially, but that shouldn't be an issue in practice due to the branching factor of playouts.
-            switch (result) 
+            switch (result)
             {
                 case ResultAbridged.WhiteWin:
                     if (node.boardState.WhiteToMove)
@@ -247,52 +248,5 @@
             }
         }
 
-        //Following section is copied from the game manager since there was no other way to access the evaluation.
-        public enum Result { Playing, WhiteIsMated, BlackIsMated, Stalemate, Repetition, FiftyMoveRule, InsufficientMaterial, TooManyMoves }
-        static Result GetResultFromBoard(Board board)
-        {
-            MoveGenerator moveGenerator = new MoveGenerator();
-            var moves = moveGenerator.GenerateMoves_DO_NOT_USE(board);
-
-            // Look for mate/stalemate
-            if (moves.Count == 0)
-            {
-                if (moveGenerator.InCheck())
-                {
-                    return (board.WhiteToMove) ? Result.WhiteIsMated : Result.BlackIsMated;
-                }
-                return Result.Stalemate;
-            }
-
-            // Fifty move rule
-            if (board.fiftyMoveCounter >= 100)
-            {
-                return Result.FiftyMoveRule;
-            }
-
-            // Threefold repetition
-            int repCount = board.RepetitionPositionHistory.Count((x => x == board.ZobristKey));
-            if (repCount == 3)
-            {
-                return Result.Repetition;
-            }
-
-            // Look for insufficient material (not all cases implemented yet)
-            int numPawns = board.pawns[Board.WhiteIndex].Count + board.pawns[Board.BlackIndex].Count;
-            int numRooks = board.rooks[Board.WhiteIndex].Count + board.rooks[Board.BlackIndex].Count;
-            int numQueens = board.queens[Board.WhiteIndex].Count + board.queens[Board.BlackIndex].Count;
-            int numKnights = board.knights[Board.WhiteIndex].Count + board.knights[Board.BlackIndex].Count;
-            int numBishops = board.bishops[Board.WhiteIndex].Count + board.bishops[Board.BlackIndex].Count;
-
-            if (numPawns + numRooks + numQueens == 0)
-            {
-                if (numKnights == 1 || numBishops == 1)
-                {
-                    return Result.InsufficientMaterial;
-                }
-            }
-
-            return Result.Playing;
-        }
     }
 }
