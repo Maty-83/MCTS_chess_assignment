@@ -96,7 +96,7 @@
 
             }
 
-            throw new NotImplementedException();//Because it hasn't been tested and the feedback isn't incorporated yet.
+            //throw new NotImplementedException();//Because it hasn't been tested and the feedback isn't incorporated yet.
         }
 
         void LogDebugInfo()
@@ -197,11 +197,14 @@
             //While there are moves available, go and randomly select a move and move on the board.
             while (moves.Count > 0 && movesTaken < maxSimulatedMoves)
             {
-                movesTaken++;
+                
                 int nextMoveIndex = UnityEngine.Random.Range(0, moves.Count);
                 board.MakeMove(moves[nextMoveIndex], true);//Something seems to break here? Got an out-of-bounds exception for a move following the stack trace from this.
-                moves = moveGenerator.GenerateMoves(board, false);
+                movesTaken++;
+
                 if (board.fiftyMoveCounter>50) return ResultAbridged.Draw;//kill if we'd draw anyway.
+
+                moves = moveGenerator.GenerateMoves(board, true);
             }
             //Once there are no moves or we reached the end, we evaluate the position
             if (moves.Count == 0)
