@@ -121,7 +121,7 @@
             double explorationParam = 1;
             var node = root;
 
-            while (0 == node.children.Count && !node.isTerminal)
+            while (0 != node.children.Count && !node.isTerminal)
             {
                 //TODO:Select on UCB
                 double maxUCB = 0;
@@ -129,20 +129,26 @@
                 foreach (var kvp in node.children)
                 {
                     MCTSNode child = kvp.Value;
-                    if (!child.isTerminal)//We don't expand terminals further since their outcome is known.
-                    {
+                    //if (!child.isTerminal)//We don't expand terminals further since their outcome is known. //TODO: Is this correct or do we select anyway?
+                    //{
                         int totalPlayoutsParent = node.wonPlayouts + node.drawPlayouts + node.lostPlayouts;
                         int totalPlayoutsChild = child.wonPlayouts + child.drawPlayouts + child.lostPlayouts;
-                        double currentUCB =
-                            (child.wonPlayouts + child.drawPlayouts * drawWinMult) / (totalPlayoutsChild) +
+                        double currentUCB;
+                        if (totalPlayoutsChild > 0)
+                        {
+                            currentUCB = (child.wonPlayouts + child.drawPlayouts * drawWinMult) / (totalPlayoutsChild) +
                             explorationParam * Mathf.Sqrt(Mathf.Log(totalPlayoutsParent) / totalPlayoutsChild);//TODO: Unsure if this is the right UCB calculation
+                        }
+                        else {
+                            currentUCB = double.MaxValue;//This is *bad*, but a good enough approximation of UCB values which are infinity
+                        }
 
                         if (currentUCB > maxUCB)
                         {
                             maxUCB = currentUCB;
                             nextNode = child;
                         }
-                    }
+                    //}
                 }
                 node = nextNode;
             }
@@ -193,7 +199,7 @@
             {
                 movesTaken++;
                 int nextMoveIndex = UnityEngine.Random.Range(0, moves.Count);
-                board.MakeMove(moves[nextMoveIndex], true);
+                board.MakeMove(moves[nextMoveIndex], true);//Something seems to break here? Got an out-of-bounds exception for a move following the stack trace from this.
                 moves = moveGenerator.GenerateMoves(board, false);
                 if (board.fiftyMoveCounter>50) return ResultAbridged.Draw;//kill if we'd draw anyway.
             }
