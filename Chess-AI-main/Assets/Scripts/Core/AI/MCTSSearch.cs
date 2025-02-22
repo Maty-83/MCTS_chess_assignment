@@ -73,12 +73,21 @@
 
             //throw new NotImplementedException();
             MCTSNode rootNode = new MCTSNode(!board.WhiteToMove, null, board, Move.InvalidMove);
+            int counter = 0;
             do
             {
+                if (settings.limitNumOfPlayouts)
+                {
+                    if (counter >= settings.maxNumOfPlayouts)
+                    {
+                        break;
+                    }
+                    counter++;
+                }
                 //Search loop here. Do-while as a simple way to make sure we always create a valid outcome so I'm not solving any stupid things.
                 MCTSNode expandingNode = DoSelection(rootNode); //HACK: We assume root isn't terminal, unsure if it's right.
                 ExpandNode(expandingNode);
-                var result = SimulateFromNode(expandingNode);   //WARNING: Is this how it's supposed to go? Not sure, we're gonna skip the final layer.
+                var result = SimulateFromNode(expandingNode, settings.playoutDepthLimit);   //WARNING: Is this how it's supposed to go? Not sure, we're gonna skip the final layer.
                                                                 //Note: The simulation on a terminal node happens on the first expansion.
                 BackpropagateFromNode(expandingNode, result);
 
@@ -190,24 +199,34 @@
         static ResultAbridged SimulateFromNode(MCTSNode node, int maxSimulatedMoves = 50)
         {
             //Simulated moves are capped at a reasonable future value (Stockfish search depths usually cap out near the 30s even on modern PCs and that is already 99%+ accurate)
-            Board board = node.boardState.Clone();
+            var board = node.boardState.GetLightweightClone();
             int movesTaken = 0;
+            bool whiteToMove=node.boardState.WhiteToMove;
             MoveGenerator moveGenerator = new MoveGenerator();
-            var moves = moveGenerator.GenerateMoves(board, true);
+            var moves = moveGenerator.GetSimMoves(board, true);
             //While there are moves available, go and randomly select a move and move on the board.
+            int fiftyMoveCounter = node.boardState.fiftyMoveCounter;
             while (moves.Count > 0 && movesTaken < maxSimulatedMoves)
             {
                 movesTaken++;
                 int nextMoveIndex = UnityEngine.Random.Range(0, moves.Count);
-                board.MakeMove(moves[nextMoveIndex], true);//Something seems to break here? Got an out-of-bounds exception for a move following the stack trace from this.
-                moves = moveGenerator.GenerateMoves(board, false);
-                if (board.fiftyMoveCounter>50) return ResultAbridged.Draw;//kill if we'd draw anyway.
+                if (MakeSimMove(moves[nextMoveIndex], ref board))
+                {
+                    fiftyMoveCounter = 0;
+                }
+                else
+                {
+                    fiftyMoveCounter++;                
+                }
+                whiteToMove=!whiteToMove;
+                moves = moveGenerator.GetSimMoves(board, false);
+                if (fiftyMoveCounter>50) return ResultAbridged.Draw;//kill if we'd draw anyway
             }
             //Once there are no moves or we reached the end, we evaluate the position
             if (moves.Count == 0)
             {
                 //Termination on no available moves. Current on move loses.
-                if (board.WhiteToMove) return ResultAbridged.WhiteLoss;
+                if (whiteToMove) return ResultAbridged.WhiteLoss;
                 else return ResultAbridged.WhiteWin;
             }
             else
@@ -254,5 +273,13 @@
             }
         }
 
+        //Makes a move assuming the simMove is valid (startPos is nonempty and endPos is a valid move) 
+        static bool MakeSimMove(SimMove simMove, ref SimPiece[,] boardClone)
+        {
+            bool tookAPiece = boardClone[simMove.endCoord1, simMove.endCoord2]!=null;
+            boardClone[simMove.endCoord1, simMove.endCoord2] = boardClone[simMove.startCoord1, simMove.startCoord2];
+            boardClone[simMove.startCoord1, simMove.startCoord2] = null;
+            return tookAPiece;
+        }
     }
 }
