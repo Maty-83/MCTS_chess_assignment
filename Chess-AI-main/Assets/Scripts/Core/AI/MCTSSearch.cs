@@ -105,7 +105,8 @@
                     bestSimMove = kvp.Key;
                 }
             }
-            bestMove=new Move()
+            
+            bestMove=new Move()// Needs fixing, dependent on how the coords conversion works
             //throw new NotImplementedException();//Because it hasn't been tested and the feedback isn't incorporated yet.
         }
 
