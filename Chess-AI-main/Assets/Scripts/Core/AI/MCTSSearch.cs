@@ -72,30 +72,40 @@
             // Don't forget to end the search once the abortSearch parameter gets set to true.
 
             //throw new NotImplementedException();
-            MCTSNode rootNode = new MCTSNode(!board.WhiteToMove, null, board, Move.InvalidMove);
+            MCTSNode rootNode = new MCTSNode(board.WhiteToMove, null, board.GetLightweightClone(), new SimMove());
+            int counter=0;
             do
             {
+                if (settings.limitNumOfPlayouts)
+                {
+                    if (!(settings.maxNumOfPlayouts > counter))
+                    {
+                        break;
+                    }
+                    counter++;
+                }
+
                 //Search loop here. Do-while as a simple way to make sure we always create a valid outcome so I'm not solving any stupid things.
                 MCTSNode expandingNode = DoSelection(rootNode); //HACK: We assume root isn't terminal, unsure if it's right.
                 ExpandNode(expandingNode);
-                var result = SimulateFromNode(expandingNode);   //WARNING: Is this how it's supposed to go? Not sure, we're gonna skip the final layer.
+                var result = SimulateFromNode(expandingNode, settings.playoutDepthLimit);   //WARNING: Is this how it's supposed to go? Not sure, we're gonna skip the final layer.
                                                                 //Note: The simulation on a terminal node happens on the first expansion.
-                BackpropagateFromNode(expandingNode, result);
+                BackpropagateFromNode(expandingNode, result);                
 
             } while (!abortSearch);
             //TODO: Add a search through all children of Root for one with most won playouts
             var maxWonPlayoutsRatio = -0.01;
+            SimMove bestSimMove;
             foreach (var kvp in rootNode.children)
             {
                 double winRatio = kvp.Value.wonPlayouts / (kvp.Value.wonPlayouts + kvp.Value.drawPlayouts + kvp.Value.lostPlayouts);
                 if (winRatio > maxWonPlayoutsRatio)
                 {
                     maxWonPlayoutsRatio = winRatio;
-                    bestMove = kvp.Key;
+                    bestSimMove = kvp.Key;
                 }
-
             }
-
+            bestMove=new Move()
             //throw new NotImplementedException();//Because it hasn't been tested and the feedback isn't incorporated yet.
         }
 
@@ -181,7 +191,7 @@
                 Board boardCopy = node.boardState.Clone();
                 boardCopy.MakeMove(children[i], true);//Now we have the move.
 
-                MCTSNode newNode = new MCTSNode(boardCopy.ColourToMove == Piece.Black, node, boardCopy, children[i]);
+                MCTSNode newNode = new MCTSNode(!node.WhiteToMove, node, boardCopy, children[i]);
                 node.children.Add(children[i], newNode);
             }
         }
@@ -199,14 +209,19 @@
             {
                 
                 int nextMoveIndex = UnityEngine.Random.Range(0, moves.Count);
+                //Debug.Log("Selected Move: " + moves[nextMoveIndex].StartSquare + " to " + moves[nextMoveIndex].TargetSquare);
                 board.MakeMove(moves[nextMoveIndex], true);//Something seems to break here? Got an out-of-bounds exception for a move following the stack trace from this.
                 movesTaken++;
 
-                if (board.fiftyMoveCounter>50) return ResultAbridged.Draw;//kill if we'd draw anyway.
+                if (board.fiftyMoveCounter > 50) {
+                    //Debug.Log("Sim round end");
+                    return ResultAbridged.Draw;//kill if we'd draw anyway.                    
+                   }
 
-                moves = moveGenerator.GenerateMoves(board, true);
+                moves = moveGenerator.GenerateMoves(board, false);
             }
             //Once there are no moves or we reached the end, we evaluate the position
+            //Debug.Log("Sim round end");
             if (moves.Count == 0)
             {
                 //Termination on no available moves. Current on move loses.
@@ -225,8 +240,9 @@
             //Recursive calling of backpropagation on the tree... Runs into the recursion limit potentially, but that shouldn't be an issue in practice due to the branching factor of playouts.
             switch (result)
             {
+                //This might need some adjusting
                 case ResultAbridged.WhiteWin:
-                    if (node.boardState.WhiteToMove)
+                    if (node.WhiteToMove)
                     {
                         node.wonPlayouts++;
                     }
@@ -236,7 +252,7 @@
                     }
                     break;
                 case ResultAbridged.WhiteLoss:
-                    if (node.boardState.WhiteToMove)
+                    if (node.WhiteToMove)
                     {
                         node.lostPlayouts++;
                     }
