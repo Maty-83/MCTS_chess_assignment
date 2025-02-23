@@ -11,6 +11,8 @@
     {
         public event System.Action<Move> onSearchComplete;
 
+        const double drawWinMult = 0.5;
+
         MoveGenerator moveGenerator;
 
         Move bestMove;
@@ -94,18 +96,19 @@
             } while (!abortSearch);
             //TODO: Add a search through all children of Root for one with most won playouts
             var maxWonPlayoutsRatio = -0.01;
+            Move tempBestMove=Move.InvalidMove;
             foreach (var kvp in rootNode.children)
             {
-                double winRatio = kvp.Value.wonPlayouts / (kvp.Value.wonPlayouts + kvp.Value.drawPlayouts + kvp.Value.lostPlayouts);
+                double winRatio = (kvp.Value.wonPlayouts+(drawWinMult*kvp.Value.drawPlayouts)) / (kvp.Value.wonPlayouts + kvp.Value.drawPlayouts + kvp.Value.lostPlayouts);
                 if (winRatio > maxWonPlayoutsRatio)
                 {
                     maxWonPlayoutsRatio = winRatio;
-                    bestMove = kvp.Key;
+                    tempBestMove = kvp.Key;
                 }
-
             }
-
-            throw new NotImplementedException();//Because it hasn't been tested and the feedback isn't incorporated yet.
+            bestMove=tempBestMove;
+            return;
+            //throw new NotImplementedException();//Because it hasn't been tested and the feedback isn't incorporated yet.
         }
 
         void LogDebugInfo()
@@ -126,7 +129,6 @@
             //While we haven't reached a node with 0 children: Select node via UCB from done playouts and insert score of incomplete nodes.
             //If the UCB of an unexplored node is higher, select a random node from the unexplored nodes.
 
-            const double drawWinMult = 0.5;
             double explorationParam = 1;
             var node = root;
 
@@ -206,7 +208,9 @@
             var moves = moveGenerator.GetSimMoves(board, true);
             //While there are moves available, go and randomly select a move and move on the board.
             int fiftyMoveCounter = node.boardState.fiftyMoveCounter;
-            while (moves.Count > 0 && movesTaken < maxSimulatedMoves)
+            bool whiteDead;
+            bool kingMissing = oneKingDead(board, out whiteDead);
+            while (movesTaken < maxSimulatedMoves && !kingMissing)
             {
                 movesTaken++;
                 int nextMoveIndex = UnityEngine.Random.Range(0, moves.Count);
@@ -219,14 +223,15 @@
                     fiftyMoveCounter++;                
                 }
                 whiteToMove=!whiteToMove;
+                kingMissing = oneKingDead(board, out whiteDead);
                 moves = moveGenerator.GetSimMoves(board, false);
                 if (fiftyMoveCounter>50) return ResultAbridged.Draw;//kill if we'd draw anyway
             }
             //Once there are no moves or we reached the end, we evaluate the position
-            if (moves.Count == 0)
+            if (kingMissing)
             {
                 //Termination on no available moves. Current on move loses.
-                if (whiteToMove) return ResultAbridged.WhiteLoss;
+                if (whiteDead) return ResultAbridged.WhiteLoss;
                 else return ResultAbridged.WhiteWin;
             }
             else
@@ -234,7 +239,6 @@
                 //Assumes we stopped for a good reason, we call it a draw.
                 return ResultAbridged.Draw;
             }
-
         }
         static void BackpropagateFromNode(MCTSNode node, ResultAbridged result)
         {
@@ -280,6 +284,34 @@
             boardClone[simMove.endCoord1, simMove.endCoord2] = boardClone[simMove.startCoord1, simMove.startCoord2];
             boardClone[simMove.startCoord1, simMove.startCoord2] = null;
             return tookAPiece;
+        }
+        //This has to be added since a dead king is possible.
+        static bool oneKingDead(SimPiece[,] board, out bool whiteIsMissing)
+        {
+            bool whiteExists = false;
+            bool blackExists = false;
+            for (int i = 0; i < board.GetLength(0); i++)
+            {
+                for (int j = 0; j < board.GetLength(1); j++)
+                {
+                    if (board[i,j] != null)
+                    {
+                        if (board[i, j].type == SimPieceType.King)
+                        {
+                            if (board[i, j].team)
+                            {
+                                whiteExists = true;
+                            }
+                            else
+                            {
+                                blackExists = true;
+                            }
+                        }
+                    }
+                }
+            }
+            whiteIsMissing=!whiteExists;
+            return !(whiteExists && blackExists);
         }
     }
 }
