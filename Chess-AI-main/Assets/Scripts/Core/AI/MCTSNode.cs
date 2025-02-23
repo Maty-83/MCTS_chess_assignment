@@ -10,9 +10,8 @@
         public bool isBlackMove;
 
         //We track all these since outside pure MCTS we can eval draws different.
-        public int wonPlayouts=0;
-        public int lostPlayouts=0;
-        public int drawPlayouts=0;
+        public float totalPlayoutScore=0;
+        public int playouts=0;
 
         public MCTSNode prevNode;//My back-propagation hook if I don't wanna do recursion.
 

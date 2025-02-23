@@ -95,14 +95,14 @@
 
             } while (!abortSearch);
             //TODO: Add a search through all children of Root for one with most won playouts
-            var maxWonPlayoutsRatio = -0.01;
+            var maxScore = 0.0f;
             Move tempBestMove=Move.InvalidMove;
             foreach (var kvp in rootNode.children)
             {
-                double winRatio = (kvp.Value.wonPlayouts+(drawWinMult*kvp.Value.drawPlayouts)) / (kvp.Value.wonPlayouts + kvp.Value.drawPlayouts + kvp.Value.lostPlayouts);
-                if (winRatio > maxWonPlayoutsRatio)
+                float score = kvp.Value.totalPlayoutScore/ kvp.Value.playouts;
+                if (score > maxScore)
                 {
-                    maxWonPlayoutsRatio = winRatio;
+                    maxScore = score;
                     tempBestMove = kvp.Key;
                 }
             }
@@ -142,12 +142,12 @@
                     MCTSNode child = kvp.Value;
                     //if (!child.isTerminal)//We don't expand terminals further since their outcome is known. //TODO: Is this correct or do we select anyway?
                     //{
-                        int totalPlayoutsParent = node.wonPlayouts + node.drawPlayouts + node.lostPlayouts;
-                        int totalPlayoutsChild = child.wonPlayouts + child.drawPlayouts + child.lostPlayouts;
+                        int totalPlayoutsParent = node.playouts;
+                        int totalPlayoutsChild = child.playouts;
                         double currentUCB;
                         if (totalPlayoutsChild > 0)
                         {
-                            currentUCB = (child.wonPlayouts + child.drawPlayouts * drawWinMult) / (totalPlayoutsChild) +
+                            currentUCB = (child.totalPlayoutScore) / (totalPlayoutsChild) +
                             explorationParam * Mathf.Sqrt(Mathf.Log(totalPlayoutsParent) / totalPlayoutsChild);//TODO: Unsure if this is the right UCB calculation
                         }
                         else {
@@ -198,7 +198,7 @@
         }
 
         enum ResultAbridged { WhiteWin, WhiteLoss, Draw }
-        static ResultAbridged SimulateFromNode(MCTSNode node, int maxSimulatedMoves = 50)
+        static float SimulateFromNode(MCTSNode node, int maxSimulatedMoves = 50)
         {
             //Simulated moves are capped at a reasonable future value (Stockfish search depths usually cap out near the 30s even on modern PCs and that is already 99%+ accurate)
             var board = node.boardState.GetLightweightClone();
@@ -225,55 +225,19 @@
                 whiteToMove=!whiteToMove;
                 kingMissing = oneKingDead(board, out whiteDead);
                 moves = moveGenerator.GetSimMoves(board, false);
-                if (fiftyMoveCounter>50) return ResultAbridged.Draw;//kill if we'd draw anyway
+                if (fiftyMoveCounter > 50) break;//kill if we'd draw anyway
             }
-            //Once there are no moves or we reached the end, we evaluate the position
-            if (kingMissing)
-            {
-                //Termination on no available moves. Current on move loses.
-                if (whiteDead) return ResultAbridged.WhiteLoss;
-                else return ResultAbridged.WhiteWin;
-            }
-            else
-            {
-                //Assumes we stopped for a good reason, we call it a draw.
-                return ResultAbridged.Draw;
-            }
+            Evaluation evaluation = new Evaluation();
+            return evaluation.EvaluateSimBoard(board, !whiteToMove);//HACK: This had to be negated due to the while cycle, watch for it again.
         }
-        static void BackpropagateFromNode(MCTSNode node, ResultAbridged result)
+        static void BackpropagateFromNode(MCTSNode node, float result)
         {
             //Recursive calling of backpropagation on the tree... Runs into the recursion limit potentially, but that shouldn't be an issue in practice due to the branching factor of playouts.
-            switch (result)
-            {
-                case ResultAbridged.WhiteWin:
-                    if (node.boardState.WhiteToMove)
-                    {
-                        node.wonPlayouts++;
-                    }
-                    else
-                    {
-                        node.lostPlayouts++;
-                    }
-                    break;
-                case ResultAbridged.WhiteLoss:
-                    if (node.boardState.WhiteToMove)
-                    {
-                        node.lostPlayouts++;
-                    }
-                    else
-                    {
-                        node.wonPlayouts++;
-                    }
-                    break;
-                case ResultAbridged.Draw:
-                    node.drawPlayouts++;
-                    break;
-                default:
-                    throw new Exception("Unexpected result");
-            }
+            node.playouts++;
+            node.totalPlayoutScore += result;
             if (node.prevNode != null)
             {
-                BackpropagateFromNode(node.prevNode, result);//TODO: Probably better to use the actual chess material difference instead of just results enum
+                BackpropagateFromNode(node.prevNode, 1-result);//TODO: Probably better to use the actual chess material difference instead of just results enum
             }
         }
 
