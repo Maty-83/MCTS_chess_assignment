@@ -175,15 +175,8 @@
             //if (!node.isTerminal) {
                 MoveGenerator moveGenerator = new MoveGenerator();
 
-                List<Move> children;
-                if (node.prevNode == null)
-                {
-                    children = moveGenerator.GenerateMoves(node.boardState, true, true);
-                }
-                else
-                {
-                    children = moveGenerator.GenerateMoves(node.boardState, true, true);//TODO: Check with Petr that I'm actually supposed to ignore illegal moves in children even for expansion, not just sim.
-                }
+                List<Move> children = moveGenerator.GenerateMoves(node.boardState, true, true);
+
                 if (children.Count == 0)
                 {
                     node.isTerminal = true;//Only expanded nodes can be considered terminal. This means we cycle into it one more time, but should still allow us to correctly execute with little efficiency loss
