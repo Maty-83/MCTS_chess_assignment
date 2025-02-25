@@ -27,6 +27,7 @@
         //public List<Move> validMoves; //This is used to store precomputed moves possible with a given board. Comparing if a move is in here or not would also give us unvisited moves.
 
         public bool isTerminal;//Is this an end-state?
+        public ResultAbridged terminalResult=ResultAbridged.Draw;
 
         public MCTSNode(bool isBlackMove, MCTSNode prevNode, Board boardState, Move lastMove)
         {

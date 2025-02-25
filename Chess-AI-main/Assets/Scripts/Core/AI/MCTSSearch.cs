@@ -7,6 +7,9 @@
     using System.Threading;
     using UnityEngine;
     using static System.Math;
+
+    public enum ResultAbridged { WhiteWin, WhiteLoss, Draw }
+
     class MCTSSearch : ISearch
     {
         public event System.Action<Move> onSearchComplete;
@@ -169,66 +172,101 @@
         }
         static void ExpandNode(MCTSNode node)
         {
+            //TODO: I HATE THIS: THE MOVE GENERATOR IGNORES CHECKMATES, WHICH IS MORE SIGNIFICANT THAN YOU CAN THINK OF.
+            //Make sure checkmates are detected and which side has a checkmate, that should fix the entire algorithm
+
+
+
+
             //I will probably write a governing function later, so this doesn't need to be connected yet.
+            if (!node.isTerminal) {
+                MoveGenerator moveGenerator = new MoveGenerator();
 
-            MoveGenerator moveGenerator = new MoveGenerator();
-
-            List<Move> children;
-            if (node.prevNode == null)
-            {
-                children = moveGenerator.GenerateMoves(node.boardState, true, true);
-            }
-            else
-            {
-                children = moveGenerator.GenerateMoves(node.boardState, false, true);//TODO: Check with Petr that I'm actually supposed to ignore illegal moves in children even for expansion, not just sim.
-            }
-            if (children.Count == 0)
-            {
-                node.isTerminal = true;//Only expanded nodes can be considered terminal. This means we cycle into it one more time, but should still allow us to correctly execute with little efficiency loss
-                return;
-            }
-            for (int i = children.Count - 1; i >= 0; i--)
-            {
-                Board boardCopy = node.boardState.Clone();
-                boardCopy.MakeMove(children[i], true);//Now we have the move.
-
-                MCTSNode newNode = new MCTSNode(boardCopy.ColourToMove == Piece.Black, node, boardCopy, children[i]);
-                node.children.Add(children[i], newNode);
-            }
-        }
-
-        enum ResultAbridged { WhiteWin, WhiteLoss, Draw }
-        static float SimulateFromNode(MCTSNode node, int maxSimulatedMoves = 50)
-        {
-            //Simulated moves are capped at a reasonable future value (Stockfish search depths usually cap out near the 30s even on modern PCs and that is already 99%+ accurate)
-            var board = node.boardState.GetLightweightClone();
-            int movesTaken = 0;
-            bool whiteToMove=node.boardState.WhiteToMove;
-            MoveGenerator moveGenerator = new MoveGenerator();
-            var moves = moveGenerator.GetSimMoves(board, true);
-            //While there are moves available, go and randomly select a move and move on the board.
-            int fiftyMoveCounter = node.boardState.fiftyMoveCounter;
-            bool whiteDead;
-            bool kingMissing = oneKingDead(board, out whiteDead);
-            while (movesTaken < maxSimulatedMoves && !kingMissing)
-            {
-                movesTaken++;
-                int nextMoveIndex = UnityEngine.Random.Range(0, moves.Count);
-                if (MakeSimMove(moves[nextMoveIndex], ref board))
+                List<Move> children;
+                if (node.prevNode == null)
                 {
-                    fiftyMoveCounter = 0;
+                    children = moveGenerator.GenerateMoves(node.boardState, true, true);
                 }
                 else
                 {
-                    fiftyMoveCounter++;                
+                    children = moveGenerator.GenerateMoves(node.boardState, false, true);//TODO: Check with Petr that I'm actually supposed to ignore illegal moves in children even for expansion, not just sim.
                 }
-                whiteToMove=!whiteToMove;
-                kingMissing = oneKingDead(board, out whiteDead);
-                moves = moveGenerator.GetSimMoves(board, false);
-                if (fiftyMoveCounter > 50) break;//kill if we'd draw anyway
+                if (children.Count == 0)
+                {
+                    node.isTerminal = true;//Only expanded nodes can be considered terminal. This means we cycle into it one more time, but should still allow us to correctly execute with little efficiency loss
+                    return;
+                }
+                for (int i = children.Count - 1; i >= 0; i--)
+                {
+                    Board boardCopy = node.boardState.Clone();
+                    boardCopy.MakeMove(children[i], true);//Now we have the move.                
+                    MCTSNode newNode = new MCTSNode(boardCopy.ColourToMove == Piece.Black, node, boardCopy, children[i]);
+                    node.children.Add(children[i], newNode);
+                }
             }
-            Evaluation evaluation = new Evaluation();
-            return evaluation.EvaluateSimBoard(board, !whiteToMove);//HACK: This had to be negated due to the while cycle, watch for it again.
+        }
+
+        
+        static float SimulateFromNode(MCTSNode node, int maxSimulatedMoves = 50)
+        {
+            if (node.isTerminal) 
+            {
+                switch (node.terminalResult) 
+                {
+                    case ResultAbridged.WhiteWin:
+                        if (node.boardState.WhiteToMove)
+                        {
+                            return 1;
+                        }
+                        else
+                        {
+                            return 0;
+                        }
+                    case ResultAbridged.WhiteLoss:
+                        if (node.boardState.WhiteToMove)
+                        {
+                            return 0;
+                        }
+                        else
+                        {
+                            return 1;
+                        }
+                    default:
+                        throw new Exception("Terminal node with non-win state detected!");
+                }
+            }
+            else
+            {
+                //Simulated moves are capped at a reasonable future value (Stockfish search depths usually cap out near the 30s even on modern PCs and that is already 99%+ accurate)
+                var board = node.boardState.GetLightweightClone();
+                int movesTaken = 0;
+                bool whiteToMove = node.boardState.WhiteToMove;
+                MoveGenerator moveGenerator = new MoveGenerator();
+                var moves = moveGenerator.GetSimMoves(board, true);
+                //While there are moves available, go and randomly select a move and move on the board.
+                int fiftyMoveCounter = node.boardState.fiftyMoveCounter;
+                bool whiteDead;
+                bool kingMissing = oneKingDead(board, out whiteDead);
+                while (movesTaken < maxSimulatedMoves && !kingMissing)
+                {
+                    movesTaken++;
+                    int nextMoveIndex = UnityEngine.Random.Range(0, moves.Count);
+                    if (MakeSimMove(moves[nextMoveIndex], ref board))
+                    {
+                        fiftyMoveCounter = 0;
+                    }
+                    else
+                    {
+                        fiftyMoveCounter++;
+                    }
+                    whiteToMove = !whiteToMove;
+                    kingMissing = oneKingDead(board, out whiteDead);
+                    moves = moveGenerator.GetSimMoves(board, false);
+                    if (fiftyMoveCounter > 50) break;//kill if we'd draw anyway
+                }
+                Evaluation evaluation = new Evaluation();
+                return evaluation.EvaluateSimBoard(board, !whiteToMove);//HACK: This had to be negated due to the while cycle, watch for it again.
+            }
         }
         static void BackpropagateFromNode(MCTSNode node, float result)
         {
