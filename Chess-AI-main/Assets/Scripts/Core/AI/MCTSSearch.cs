@@ -194,6 +194,20 @@
         
         static float SimulateFromNode(MCTSNode node, int maxSimulatedMoves = 50)
         {
+            if (node.isTerminal)
+            {
+                //Node is terminal for some reason. We should likely check it out
+                if (node.children.Count == 0)
+                {
+                    return 1;
+                }
+                else
+                {
+                    throw new Exception("A terminal node with children exists");
+                }
+            }
+            else
+            {
                 //Simulated moves are capped at a reasonable future value (Stockfish search depths usually cap out near the 30s even on modern PCs and that is already 99%+ accurate)
                 var board = node.boardState.GetLightweightClone();
                 int movesTaken = 0;
@@ -223,6 +237,7 @@
                 }
                 Evaluation evaluation = new Evaluation();
                 return evaluation.EvaluateSimBoard(board, !node.boardState.WhiteToMove);//HACK: This had to be negated due to the while cycle, watch for it again.
+            }
         }
         static void BackpropagateFromNode(MCTSNode node, float result)
         {
