@@ -94,7 +94,8 @@
                 ExpandNode(expandingNode);
                 var result = SimulateFromNode(expandingNode, settings.playoutDepthLimit);   //WARNING: Is this how it's supposed to go? Not sure, we're gonna skip the final layer.
                                                                 //Note: The simulation on a terminal node happens on the first expansion.
-                BackpropagateFromNode(expandingNode, result);
+
+                BackpropagateFromNode(expandingNode, result);//BUG: This sucks! I backpropagate from incorrect colors on occasion.
 
             } while (!abortSearch);
             //TODO: Add a search through all children of Root for one with most won playouts
@@ -150,8 +151,7 @@
                         double currentUCB;
                         if (totalPlayoutsChild > 0)
                         {
-                            currentUCB = (child.totalPlayoutScore) / (totalPlayoutsChild) +
-                            explorationParam * Mathf.Sqrt(Mathf.Log(totalPlayoutsParent) / totalPlayoutsChild);//TODO: Unsure if this is the right UCB calculation
+                            currentUCB = child.totalPlayoutScore / totalPlayoutsChild + explorationParam * Mathf.Sqrt(Mathf.Log(totalPlayoutsParent) / totalPlayoutsChild);//TODO: Unsure if this is the right UCB calculation
                         }
                         else {
                             currentUCB = double.MaxValue;//This is *bad*, but a good enough approximation of UCB values which are infinity
@@ -172,14 +172,7 @@
         }
         static void ExpandNode(MCTSNode node)
         {
-            //TODO: I HATE THIS: THE MOVE GENERATOR IGNORES CHECKMATES, WHICH IS MORE SIGNIFICANT THAN YOU CAN THINK OF.
-            //Make sure checkmates are detected and which side has a checkmate, that should fix the entire algorithm
-
-
-
-
-            //I will probably write a governing function later, so this doesn't need to be connected yet.
-            if (!node.isTerminal) {
+            //if (!node.isTerminal) {
                 MoveGenerator moveGenerator = new MoveGenerator();
 
                 List<Move> children;
@@ -189,7 +182,7 @@
                 }
                 else
                 {
-                    children = moveGenerator.GenerateMoves(node.boardState, false, true);//TODO: Check with Petr that I'm actually supposed to ignore illegal moves in children even for expansion, not just sim.
+                    children = moveGenerator.GenerateMoves(node.boardState, true, true);//TODO: Check with Petr that I'm actually supposed to ignore illegal moves in children even for expansion, not just sim.
                 }
                 if (children.Count == 0)
                 {
@@ -203,40 +196,11 @@
                     MCTSNode newNode = new MCTSNode(boardCopy.ColourToMove == Piece.Black, node, boardCopy, children[i]);
                     node.children.Add(children[i], newNode);
                 }
-            }
         }
 
         
         static float SimulateFromNode(MCTSNode node, int maxSimulatedMoves = 50)
         {
-            if (node.isTerminal) 
-            {
-                switch (node.terminalResult) 
-                {
-                    case ResultAbridged.WhiteWin:
-                        if (node.boardState.WhiteToMove)
-                        {
-                            return 1;
-                        }
-                        else
-                        {
-                            return 0;
-                        }
-                    case ResultAbridged.WhiteLoss:
-                        if (node.boardState.WhiteToMove)
-                        {
-                            return 0;
-                        }
-                        else
-                        {
-                            return 1;
-                        }
-                    default:
-                        throw new Exception("Terminal node with non-win state detected!");
-                }
-            }
-            else
-            {
                 //Simulated moves are capped at a reasonable future value (Stockfish search depths usually cap out near the 30s even on modern PCs and that is already 99%+ accurate)
                 var board = node.boardState.GetLightweightClone();
                 int movesTaken = 0;
@@ -265,8 +229,7 @@
                     if (fiftyMoveCounter > 50) break;//kill if we'd draw anyway
                 }
                 Evaluation evaluation = new Evaluation();
-                return evaluation.EvaluateSimBoard(board, !whiteToMove);//HACK: This had to be negated due to the while cycle, watch for it again.
-            }
+                return evaluation.EvaluateSimBoard(board, !node.boardState.WhiteToMove);//HACK: This had to be negated due to the while cycle, watch for it again.
         }
         static void BackpropagateFromNode(MCTSNode node, float result)
         {
