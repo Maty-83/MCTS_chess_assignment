@@ -143,7 +143,7 @@
             while (0 != node.children.Count && !node.isTerminal)
             {
                 //TODO:Select on UCB
-                double maxUCB = 0;
+                double maxUCB = double.MinValue;
                 MCTSNode nextNode = null;
                 foreach (var kvp in node.children)
                 {
@@ -203,7 +203,7 @@
                 //Node is terminal for some reason. We should likely check it out
                 if (node.children.Count == 0)
                 {
-                    return 1;//Temp change to test.
+                    return 3;//Temp change to test.
                 }
                 else
                 {
@@ -241,8 +241,6 @@
                 }
                 Evaluation evaluation = new Evaluation();
                 var baseEval= evaluation.EvaluateSimBoard(board, !node.boardState.WhiteToMove);
-                const float nonWinCompensationFactor = 0.5f;
-                baseEval = (baseEval - 0.5f) * nonWinCompensationFactor + 0.5f;
                 return baseEval;
             }
         }
