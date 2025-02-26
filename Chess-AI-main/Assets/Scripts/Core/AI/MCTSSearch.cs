@@ -99,7 +99,7 @@
 
             } while (!abortSearch);
             //TODO: Add a search through all children of Root for one with most won playouts
-            var maxScore = 0.0f;
+            var maxScore = float.MinValue;
             Move tempBestMove=Move.InvalidMove;
             foreach (var kvp in rootNode.children)
             {
@@ -110,6 +110,7 @@
                     tempBestMove = kvp.Key;
                 }
             }
+            Debug.Log("Selected best move: " + tempBestMove.Name);
             bestMove=tempBestMove;
             return;
             //throw new NotImplementedException();//Because it hasn't been tested and the feedback isn't incorporated yet.
@@ -135,7 +136,10 @@
 
             double explorationParam = 1;
             var node = root;
-
+            /*if (root == null)
+            {
+                Debug.Log("Node is null, WTF?");
+            }*/
             while (0 != node.children.Count && !node.isTerminal)
             {
                 //TODO:Select on UCB
@@ -199,7 +203,7 @@
                 //Node is terminal for some reason. We should likely check it out
                 if (node.children.Count == 0)
                 {
-                    return 1;
+                    return 1;//Temp change to test.
                 }
                 else
                 {
@@ -236,7 +240,10 @@
                     if (fiftyMoveCounter > 50) break;//kill if we'd draw anyway
                 }
                 Evaluation evaluation = new Evaluation();
-                return evaluation.EvaluateSimBoard(board, !node.boardState.WhiteToMove);//HACK: This had to be negated due to the while cycle, watch for it again.
+                var baseEval= evaluation.EvaluateSimBoard(board, !node.boardState.WhiteToMove);
+                const float nonWinCompensationFactor = 0.5f;
+                baseEval = (baseEval - 0.5f) * nonWinCompensationFactor + 0.5f;
+                return baseEval;
             }
         }
         static void BackpropagateFromNode(MCTSNode node, float result)
